@@ -26,10 +26,10 @@ contract XYZToken is IERC20, Ownable {
     IUniswapV2Router02 public router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
 
     // Taxation on transfers
-    uint256 public buyFee             = 100;
-    uint256 public sellFee            = 150;
-    uint256 public transferFee        = 45;
-    uint256 public constant TAX_DENOM = 1000;
+    uint256 public buyFee             = 1000;
+    uint256 public sellFee            = 1500;
+    uint256 public transferFee        = 0;
+    uint256 public constant TAX_DENOM = 10000;
 
     // permissions
     struct Permissions {
@@ -199,15 +199,15 @@ contract XYZToken is IERC20, Ownable {
 
     function setFees(uint _buyFee, uint _sellFee, uint _transferFee) external onlyOwner {
         require(
-            _buyFee <= 300,
+            _buyFee <= 3000,
             'Buy Fee Too High'
         );
         require(
-            _sellFee <= 300,
+            _sellFee <= 3000,
             'Sell Fee Too High'
         );
         require(
-            _transferFee <= 300,
+            _transferFee <= 3000,
             'Transfer Fee Too High'
         );
 
@@ -247,6 +247,7 @@ contract XYZToken is IERC20, Ownable {
         );
         _balances[account] = _balances[sender].sub(amount, 'Balance Underflow');
         _totalSupply = _totalSupply.sub(amount, 'Supply Underflow');
+        emit Transfer(account, address(0), amount);
     }
 
     receive() external payable {}

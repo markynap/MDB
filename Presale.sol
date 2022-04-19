@@ -25,10 +25,10 @@ contract Presale {
     bool public isStarted;
 
     // maximum contribution
-    uint256 public max_contribution = 17 * 10**18;
+    uint256 public max_contribution = 475 * 10**16;
 
     // maximum reached
-    uint256 public hardCap = 2450 * 10**18;
+    uint256 public hardCap = 1310 * 10**18;
 
     // minimum amount donated
     uint256 public min_donation = 12 * 10**17;
@@ -77,7 +77,7 @@ contract Presale {
     }
 
     function increaseContribution() external onlyCreator {
-        max_contribution = 245 * 10**17;
+        max_contribution = 715 * 10**16;
     }
 
     function terminate() external onlyCreator {
