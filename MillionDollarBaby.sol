@@ -67,8 +67,9 @@ contract XYZToken is IERC20, Ownable {
             IUniswapV2Factory(router.factory()).createPair(router.WETH(), address(this))
         ].isLiquidityPool = true;
 
+        // exempt sender for tax-free initial distribution
         permissions[
-            address(router)
+            msg.sender
         ].isFeeExempt = true;
 
         // initial supply allocation
@@ -154,7 +155,7 @@ contract XYZToken is IERC20, Ownable {
     }
 
     function withdraw(address token) external onlyOwner {
-        IERC20(token).transfer(owner, IERC20(token).balanceOf(address(this)));
+        IERC20(token).transfer(msg.sender, IERC20(token).balanceOf(address(this)));
     }
 
     function withdrawBNB() external onlyOwner {
@@ -220,7 +221,6 @@ contract XYZToken is IERC20, Ownable {
 
     function setFeeExempt(address account, bool isExempt) external onlyOwner {
         require(account != address(0), 'Zero Address');
-
         permissions[account].isFeeExempt = isExempt;
         emit SetFeeExemption(account, isExempt);
     }

@@ -26,6 +26,7 @@ contract SellReceiver {
     /**
         Minimum Amount Of MDB In Contract To Trigger `trigger` Unless `approved`
             If Set To A Very High Number, Only Approved May Call Trigger Function
+            If Set To A Very Low Number, Anybody May Call At Their Leasure
      */
     uint256 public minimumTokensRequiredToTrigger;
 
@@ -59,6 +60,9 @@ contract SellReceiver {
         path = address[](2);
         path[0] = token_;
         path[1] = router.WETH();
+
+        // set initial approved
+        approved[msg.sender] = true;
     }
 
     function trigger() external {
