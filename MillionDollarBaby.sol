@@ -51,12 +51,6 @@ contract MillionDollarBaby is IERC20, Ownable {
     event SetAutomatedMarketMaker(address account, bool isMarketMaker);
     event SetFees(uint256 buyFee, uint256 sellFee, uint256 transferFee);
     
-    // modifiers
-    modifier onlyOwner(){
-        require(msg.sender == owner, 'Only Owner');
-        _;
-    }
-
     constructor() {
 
         // set initial starting supply
@@ -111,12 +105,12 @@ contract MillionDollarBaby is IERC20, Ownable {
     }
 
     function burn(uint256 amount) external returns (bool) {
-        _burn(msg.sender, amount);
+        return _burn(msg.sender, amount);
     }
 
     function burnFrom(address account, uint256 amount) external returns (bool) {
-        _allowances[sender][msg.sender] = _allowances[sender][msg.sender].sub(amount, 'Insufficient Allowance');
-        _burn(account, amount);
+        _allowances[account][msg.sender] = _allowances[account][msg.sender].sub(amount, 'Insufficient Allowance');
+        return _burn(account, amount);
     }
     
     /** Internal Transfer */
@@ -152,6 +146,7 @@ contract MillionDollarBaby is IERC20, Ownable {
 
         // emit transfer
         emit Transfer(sender, recipient, sendAmount);
+        return true;
     }
 
     function withdraw(address token) external onlyOwner {
@@ -161,7 +156,7 @@ contract MillionDollarBaby is IERC20, Ownable {
     }
 
     function withdrawBNB() external onlyOwner {
-        (bool s,) = payable(owner).call{value: address(this).balance}("");
+        (bool s,) = payable(msg.sender).call{value: address(this).balance}("");
         require(s);
     }
 
@@ -247,9 +242,10 @@ contract MillionDollarBaby is IERC20, Ownable {
             amount > 0,
             'Zero Amount'
         );
-        _balances[account] = _balances[sender].sub(amount, 'Balance Underflow');
+        _balances[account] = _balances[account].sub(amount, 'Balance Underflow');
         _totalSupply = _totalSupply.sub(amount, 'Supply Underflow');
         emit Transfer(account, address(0), amount);
+        return true;
     }
 
     receive() external payable {}
