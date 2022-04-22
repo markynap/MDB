@@ -155,7 +155,9 @@ contract MillionDollarBaby is IERC20, Ownable {
     }
 
     function withdraw(address token) external onlyOwner {
-        IERC20(token).transfer(msg.sender, IERC20(token).balanceOf(address(this)));
+        require(token != address(0), 'Zero Address');
+        bool s = IERC20(token).transfer(msg.sender, IERC20(token).balanceOf(address(this)));
+        require(s, 'Failure On Token Withdraw');
     }
 
     function withdrawBNB() external onlyOwner {
