@@ -7,7 +7,7 @@ interface IMDB {
     function getOwner() external view returns (address);
 }
 
-contract SellReceiver {
+contract BuyReceiver {
 
     // MDB token
     address public immutable token;
