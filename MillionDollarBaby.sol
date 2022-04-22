@@ -6,7 +6,7 @@ import "./Ownable.sol";
 import "./IUniswapV2Router02.sol";
 import "./SafeMath.sol";
 
-contract XYZToken is IERC20, Ownable {
+contract MillionDollarBaby is IERC20, Ownable {
 
     using SafeMath for uint256;
 
