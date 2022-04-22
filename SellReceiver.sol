@@ -57,7 +57,7 @@ contract SellReceiver {
         token = token_;
 
         // Sell Path
-        path = address[](2);
+        path = new address[](2);
         path[0] = token_;
         path[1] = router.WETH();
 
@@ -108,15 +108,16 @@ contract SellReceiver {
         trustFundPercentage = newAllocatiton;
     }
     function withdraw() external onlyOwner {
-        (bool s,) = payable(owner).call{vaule: amount}("");
+        (bool s,) = payable(msg.sender).call{value: address(this).balance}("");
         require(s);
     }
-    function withdraw(address token) external onlyOwner {
-        IERC20(token).transfer(owner, IERC20(token).balanceOf(address(this)));
+    
+    function withdraw(address _token) external onlyOwner {
+        IERC20(_token).transfer(msg.sender, IERC20(_token).balanceOf(address(this)));
     }
     receive() external payable {}
     function _send(address recipient, uint amount) internal {
-        (bool s,) = payable(recipient).call{vaule: amount}("");
+        (bool s,) = payable(recipient).call{value: amount}("");
         require(s);
     }
 }

@@ -95,12 +95,12 @@ contract BuyReceiver {
     }
     
     function withdraw() external onlyOwner {
-        (bool s,) = payable(owner).call{vaule: amount}("");
+        (bool s,) = payable(msg.sender).call{value: address(this).balance}("");
         require(s);
     }
     
-    function withdraw(address token) external onlyOwner {
-        IERC20(token).transfer(owner, IERC20(token).balanceOf(address(this)));
+    function withdraw(address _token) external onlyOwner {
+        IERC20(_token).transfer(msg.sender, IERC20(_token).balanceOf(address(this)));
     }
     
     receive() external payable {}
