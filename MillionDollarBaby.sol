@@ -3,7 +3,6 @@ pragma solidity 0.8.4;
 
 import "./IERC20.sol";
 import "./Ownable.sol";
-import "./IUniswapV2Router02.sol";
 import "./SafeMath.sol";
 
 contract MillionDollarBaby is IERC20, Ownable {
@@ -17,19 +16,19 @@ contract MillionDollarBaby is IERC20, Ownable {
     string private constant _name = "MillionDollarBaby";
     string private constant _symbol = "MDB";
     uint8  private constant _decimals = 18;
-    
+
     // balances
     mapping (address => uint256) private _balances;
     mapping (address => mapping (address => uint256)) private _allowances;
-
-    // PCS Router
-    IUniswapV2Router02 public router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
 
     // Taxation on transfers
     uint256 public buyFee             = 1000;
     uint256 public sellFee            = 1500;
     uint256 public transferFee        = 0;
     uint256 public constant TAX_DENOM = 10000;
+
+    // Max Transaction Limit
+    uint256 public max_sell_transaction_limit;
 
     // permissions
     struct Permissions {
@@ -50,16 +49,14 @@ contract MillionDollarBaby is IERC20, Ownable {
     event SetFeeExemption(address account, bool isFeeExempt);
     event SetAutomatedMarketMaker(address account, bool isMarketMaker);
     event SetFees(uint256 buyFee, uint256 sellFee, uint256 transferFee);
-    
+
     constructor() {
 
         // set initial starting supply
         _totalSupply = 10**9 * 10**_decimals;
 
-        // Set initial automated market maker
-        permissions[
-            IUniswapV2Factory(router.factory()).createPair(router.WETH(), address(this))
-        ].isLiquidityPool = true;
+        // max sell transaction
+        max_sell_transaction_limit = 3 * 10**6 * 10**18;
 
         // exempt sender for tax-free initial distribution
         permissions[
@@ -92,7 +89,7 @@ contract MillionDollarBaby is IERC20, Ownable {
         emit Approval(msg.sender, spender, amount);
         return true;
     }
-  
+
     /** Transfer Function */
     function transfer(address recipient, uint256 amount) external override returns (bool) {
         return _transferFrom(msg.sender, recipient, amount);
@@ -136,6 +133,12 @@ contract MillionDollarBaby is IERC20, Ownable {
         // allocate fee
         if (fee > 0) {
             address feeRecipient = feeDestination == address(0) ? address(this) : feeDestination;
+            if (feeRecipient == sellFeeRecipient) {
+                require(
+                    amount <= max_sell_transaction_limit,
+                    'Amount Exceeds Max Transaction Limit'
+                );
+            }
             _balances[feeRecipient] = _balances[feeRecipient].add(fee);
             emit Transfer(sender, feeRecipient, fee);
         }
@@ -147,6 +150,14 @@ contract MillionDollarBaby is IERC20, Ownable {
         // emit transfer
         emit Transfer(sender, recipient, sendAmount);
         return true;
+    }
+
+    function setMaxSellTransactionLimit(uint256 maxSellTransactionLimit) external onlyOwner {
+        require(
+            maxSellTransactionLimit >= _totalSupply.div(1000),
+            'Max Sell Tx Limit Too Low'
+        );
+        max_sell_transaction_limit = maxSellTransactionLimit;
     }
 
     function withdraw(address token) external onlyOwner {
@@ -241,6 +252,10 @@ contract MillionDollarBaby is IERC20, Ownable {
         require(
             amount > 0,
             'Zero Amount'
+        );
+        require(
+            amount <= balanceOf(account),
+            'Insufficient Balance'
         );
         _balances[account] = _balances[account].sub(amount, 'Balance Underflow');
         _totalSupply = _totalSupply.sub(amount, 'Supply Underflow');
