@@ -18,7 +18,7 @@ contract SellReceiver {
 
     // Recipients Of Fees
     address public trustFund;
-    address public multisig;
+    address public marketing;
 
     // Token -> BNB
     address[] path;
@@ -47,14 +47,18 @@ contract SellReceiver {
         _;
     }
 
-    constructor(address token_) {
+    constructor(address token_, address trustFund_, address marketing_) {
         require(
-            token_ != address(0),
+            token_ != address(0) &&
+            trustFund_ != address(0) &&
+            marketing_ != address(0),
             'Zero Address'
         );
 
-        // Initialize Token
+        // Initialize Addresses
         token = token_;
+        trustFund = trustFund_;
+        marketing = marketing_;
 
         // Sell Path
         path = new address[](2);
@@ -63,6 +67,12 @@ contract SellReceiver {
 
         // set initial approved
         approved[msg.sender] = true;
+
+        // trust fund percentage
+        trustFundPercentage = 80;
+
+        // only approved can trigger at the start
+        minimumTokensRequiredToTrigger = 10**30;
     }
 
     function trigger() external {
@@ -85,7 +95,7 @@ contract SellReceiver {
 
             // send to destinations
             _send(trustFund, part1);
-            _send(multisig, part2);
+            _send(marketing, part2);
         }
     }
 
@@ -93,9 +103,9 @@ contract SellReceiver {
         require(tFund != address(0));
         trustFund = tFund;
     }
-    function setMultisig(address multisig_) external onlyOwner {
-        require(multisig_ != address(0));
-        multisig = multisig_;
+    function setMarketing(address marketing_) external onlyOwner {
+        require(marketing_ != address(0));
+        marketing = marketing_;
     }
     function setApproved(address caller, bool isApproved) external onlyOwner {
         approved[caller] = isApproved;
