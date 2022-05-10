@@ -28,7 +28,6 @@ interface XUSDRoyalty {
 contract MDBPlus is IERC20, Ownable, ReentrancyGuard {
     
     using SafeMath for uint256;
-    using Address for address;
 
     // token data
     string private constant _name = "MDB+";
@@ -62,6 +61,9 @@ contract MDBPlus is IERC20, Ownable, ReentrancyGuard {
     // Royalty Data Fetcher
     XUSDRoyalty private immutable royaltyTracker;
 
+    // Swap Path From BNB -> BUSD
+    address[] path;
+
     // Fees
     uint256 public mintFee        = 99250;            // 0.75% mint fee
     uint256 public sellFee        = 99750;            // 0.25% redeem fee 
@@ -92,6 +94,11 @@ contract MDBPlus is IERC20, Ownable, ReentrancyGuard {
 
         // Allows Mint Access Pre Activation
         canTransactPreLaunch[msg.sender] = true;
+
+        // Swap Path For BNB -> BUSD
+        path = new address[](2);
+        path[0] = router.WETH();
+        path[1] = address(underlying);
 
         // allocate initial 1 token
         _balances[msg.sender] = _totalSupply;
@@ -193,7 +200,7 @@ contract MDBPlus is IERC20, Ownable, ReentrancyGuard {
         @param minOut minimum amount out from BNB -> BUSD - prevents front run attacks
         @return received number of MDB+ tokens received
      */
-    function mintWithNative(address recipient, uint256 minOut) external override payable returns (uint256) {
+    function mintWithNative(address recipient, uint256 minOut) external payable returns (uint256) {
         _checkGarbageCollector(address(this));
         _checkGarbageCollector(DEAD);
         return _mintWithNative(recipient, minOut);
@@ -209,10 +216,10 @@ contract MDBPlus is IERC20, Ownable, ReentrancyGuard {
         @param recipient Account to receive minted MDB+ tokens
         @return tokensMinted number of MDB+ tokens minted
     */
-    function mintWithBacking(uint256 numTokens, address recipient) external override nonReentrant returns (uint256) {
+    function mintWithBacking(uint256 numTokens, address recipient) external nonReentrant returns (uint256) {
         _checkGarbageCollector(address(this));
         _checkGarbageCollector(DEAD);
-        return _mintWithBacking(backingToken, numTokens, recipient);
+        return _mintWithBacking(numTokens, recipient);
     }
 
     /** 
@@ -243,7 +250,7 @@ contract MDBPlus is IERC20, Ownable, ReentrancyGuard {
         @param tokenInAmount - Amount of `tokenIn` to exchange for tokenOut
         @param recipient - Recipient of `tokenOut` tokens
      */
-    function exchange(address tokenIn, address tokenOut, uint256 tokenInAmount, address recipient) external override nonReentrant {
+    function exchange(address tokenIn, address tokenOut, uint256 tokenInAmount, address recipient) external nonReentrant {
         require(
             tokenIn != address(0) && 
             tokenOut != address(0) && 
@@ -275,7 +282,7 @@ contract MDBPlus is IERC20, Ownable, ReentrancyGuard {
         DOES NOT REDEEM UNDERLYING ASSET FOR USER
         @param amount Number of MDB+ Tokens To Burn
     */
-    function burn(uint256 amount) external override nonReentrant {
+    function burn(uint256 amount) external nonReentrant {
         // get balance of caller
         uint256 bal = _balances[msg.sender];
         require(bal >= amount && bal > 0, 'Zero Holdings');
@@ -504,7 +511,7 @@ contract MDBPlus is IERC20, Ownable, ReentrancyGuard {
     
 
     /** Price Of MDB+ in BUSD With 18 Points Of Precision */
-    function calculatePrice() external view override returns (uint256) {
+    function calculatePrice() external view returns (uint256) {
         return _calculatePrice();
     }
     
@@ -523,7 +530,7 @@ contract MDBPlus is IERC20, Ownable, ReentrancyGuard {
     }
 
     /** Returns the value of `holder`'s holdings */
-    function getValueOfHoldings(address holder) public view override returns(uint256) {
+    function getValueOfHoldings(address holder) public view returns(uint256) {
         return amountOut(_balances[holder]);
     }
 
@@ -625,7 +632,7 @@ contract MDBPlus is IERC20, Ownable, ReentrancyGuard {
     
     /** Excludes Contract From Transfer Fees */
     function setPermissions(address Contract, bool transferFeeExempt) external onlyOwner {
-        require(Contract != address(0) && Contract != PROMISE_USD);
+        require(Contract != address(0), 'Zero Address');
         isTransferFeeExempt[Contract] = transferFeeExempt;
         emit SetPermissions(Contract, transferFeeExempt);
     }
