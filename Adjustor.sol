@@ -25,16 +25,19 @@ contract Adjustor {
     // DEX Router
     IUniswapV2Router02 private router;
 
+    // Path
+    address[] path;
+
     modifier onlyAdjustor(){
         require(
             canAdjust[msg.sender],
             'Only Adjustors'
         );
+        _;
     }
 
     constructor(
-        address token_,
-        address DEX_
+        address token_
     ) {
 
         // token
@@ -44,10 +47,15 @@ contract Adjustor {
         canAdjust[msg.sender] = true;
 
         // DEX Router
-        router = IUniswapV2Router02(DEX_);
+        router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
 
         // Liquidity Pool Token
         LP = IUniswapV2Factory(router.factory()).getPair(token_, router.WETH());
+
+        // swap path
+        path = new address[](2);
+        path[0] = router.WETH();
+        path[1] = token_;
     }
 
     function setAdjustor(address adjustor_, bool canAdjust_) external onlyAdjustor {

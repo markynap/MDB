@@ -1,15 +1,13 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-interface IERC20 {
-    function transfer(address to, uint amount) external returns (bool);
-    function balanceOf(address account) external view returns (uint256);
-}
+import "./IERC20.sol";
+import "./IUniswapV2Router02.sol";
 
 contract MDBSwapper {
 
     // MDB Token
-    address public token;
+    address public immutable token;
 
     // router
     IUniswapV2Router02 router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
@@ -24,8 +22,8 @@ contract MDBSwapper {
         path[1] = _token;
     }
 
-    function withdraw(address token) external {
-        IERC20(token).transfer(msg.sender, IERC20(token).balanceOf(address(this)));
+    function withdraw(address _token) external {
+        IERC20(_token).transfer(msg.sender, IERC20(_token).balanceOf(address(this)));
     }
 
     function withdraw() external {

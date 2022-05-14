@@ -9,7 +9,6 @@ interface IMDB {
     function getOwner() external view returns (address);
     function sellFeeRecipient() external view returns (address);
     function buyFeeRecipient() external view returns (address);
-    function transferFeeRecipient() external view returns (address);
 }
 
 contract ReceiverTrigger {
@@ -26,7 +25,7 @@ contract ReceiverTrigger {
     // Ownership
     modifier onlyOwner(){
         require(
-            msg.sender == IMDB(token).getOwner(),
+            msg.sender == MDB.getOwner(),
             'Only MDB Owner'
         );
         _;
@@ -44,16 +43,12 @@ contract ReceiverTrigger {
 
         address o1 = MDB.sellFeeRecipient();
         address o2 = MDB.buyFeeRecipient();
-        address o3 = MDB.transferFeeRecipient();
 
         if (o1 != address(0)) {
             ITrigger(o1).trigger();
         }
         if (o2 != address(0)) {
             ITrigger(o2).trigger();
-        }
-        if (o3 != address(0)) {
-            ITrigger(o3).trigger();
         }
     }
 
