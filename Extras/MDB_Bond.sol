@@ -3,19 +3,20 @@ pragma solidity 0.8.4;
 
 import "./IERC20.sol";
 import "./IUniswapV2Router02.sol";
+import "./Ownable.sol";
 
-contract MDBBond {
+contract MDBBond is Ownable {
 
-    IUniswapV2Router02 router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
-    uint lockTime = 1728000;
-    IERC20 MDB = IERC20(0x0557a288A93ed0DF218785F2787dac1cd077F8f3);
-    address[] path;
+    IUniswapV2Router02 private constant router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
+    IERC20 public constant MDB = IERC20(0x0557a288A93ed0DF218785F2787dac1cd077F8f3);
+    uint public lockTime = 1728000;
+    address[] private path;
 
     struct BondUser {
         uint amount;
         uint unlockBlock;
     }
-    mapping ( address => BondUser) bonds;
+    mapping ( address => BondUser) public bonds;
 
     constructor(){
         path = new address[](2);
@@ -48,6 +49,24 @@ contract MDBBond {
         );
         delete bonds[msg.sender];
         MDB.transfer(msg.sender, amount);
+    }
+
+    function setLockTime(uint newLockTime) external onlyOwner {
+        require(newLockTime <= 10**8, 'Lock Time Too Long');
+        lockTime = newLockTime;
+    }
+
+    function withdraw(IERC20 token) external onlyOwner {
+        require(
+            address(token) != address(MDB),
+            'Cannot Withdraw MDB'
+        );
+        token.transfer(msg.sender, token.balanceOf(address(this)));
+    }
+
+    function withdraw() external onlyOwner {
+        (bool s,) = payable(msg.sender).call{value: address(this).balance}("");
+        require(s);
     }
 
     receive() external payable {
