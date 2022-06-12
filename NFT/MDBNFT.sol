@@ -1161,10 +1161,38 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
      * @dev See {IERC721Metadata-tokenURI}.
      */
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
-        require(_exists(tokenId), "ERC721Metadata: URI query for nonexistent token");
+        require(_exists(tokenId), "nonexistent token");
 
-        string memory baseURI = "https://ipfs.io/ipfs/QmWFtHEqUhgK1Q6EP65Esj6jeS1SZpkzg66F2ozb6Nzg9r";
-        return baseURI;
+        string memory baseURI = "https://gateway.pinata.cloud/ipfs/QmQQSVjB5rvrKFRrZuJVXs1D3QAasz7bPQjst4mRcBzrJB/FS-";
+        string memory ending = ".png";
+        string memory middle = uint2str(tokenId+1);
+        string memory fHalf = string.concat(baseURI, middle);
+        return string.concat(fHalf, ending);
+    }
+
+    /**
+        Converts A Uint Into a String
+    */
+    function uint2str(uint _i) internal pure returns (string memory _uintAsString) {
+        if (_i == 0) {
+            return "0";
+        }
+        uint j = _i;
+        uint len;
+        while (j != 0) {
+            len++;
+            j /= 10;
+        }
+        bytes memory bstr = new bytes(len);
+        uint k = len;
+        while (_i != 0) {
+            k = k-1;
+            uint8 temp = (48 + uint8(_i - _i / 10 * 10));
+            bytes1 b1 = bytes1(temp);
+            bstr[k] = b1;
+            _i /= 10;
+        }
+        return string(bstr);
     }
 
 }
