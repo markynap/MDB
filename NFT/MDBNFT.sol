@@ -718,7 +718,7 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
     uint256 public bountyPercent = 1;
 
     // max supply held within contract
-    uint256 public maxSupplyPercentage = 5;
+    uint256 public maxSupplyPercentage = 500;
 
     function totalSupply() external view returns (uint256) {
         return _totalSupply;
@@ -792,7 +792,7 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
     function pendingRewards() public view returns (uint256) {
 
         uint bal = MDBInContract();
-        uint expectedBalance = ( IERC20(MDB).totalSupply() * maxSupplyPercentage ) / 100;
+        uint expectedBalance = ( IERC20(MDB).totalSupply() * maxSupplyPercentage ) / 10000;
 
         if (bal < expectedBalance) {
             return 0;
