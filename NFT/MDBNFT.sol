@@ -718,11 +718,18 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
     uint256 public bountyPercent = 1;
 
     // max supply held within contract
-    uint256 public maxSupplyPercentage = 500;
+    uint256 public maxSupplyPercentage = 5000;
 
-    function totalSupply() external view returns (uint256) {
-        return _totalSupply;
-    }
+    // URI Data
+    string private baseURI = "https://gateway.pinata.cloud/ipfs/QmQQSVjB5rvrKFRrZuJVXs1D3QAasz7bPQjst4mRcBzrJB/FS-";
+    string private ending = ".json";
+
+
+
+
+    ////////////////////////////////////////////////
+    ///////////   RESTRICTED FUNCTIONS   ///////////
+    ////////////////////////////////////////////////
 
     function whitelistUsers(address[] calldata users) external onlyOwner {
         for (uint i = 0; i < users.length; i++) {
@@ -770,6 +777,42 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
         bountyPercent = newBounty;
     }
 
+    function setBaseURI(string calldata newURI) external onlyOwner {
+        baseURI = newURI;
+    }
+
+    function setURIExtention(string calldata newExtention) external onlyOwner {
+        ending = newExtention;
+    }
+
+
+
+    ////////////////////////////////////////////////
+    ///////////     PUBLIC FUNCTIONS     ///////////
+    ////////////////////////////////////////////////
+
+    /** 
+     * Mints `numberOfMints` to caller
+     */
+    function mint(uint256 numberOfMints) external payable {
+        require(
+            tradingEnabled,
+            'Trading Not Enabled'
+        );
+        if (whitelistEnabled) {
+            require(
+                isWhitelisted[msg.sender],
+                'Caller not on white list'
+            );
+        }
+        require(numberOfMints > 0, 'Invalid Input');
+        require(price * numberOfMints <= msg.value, 'Incorrect Price Sent');
+
+        for (uint i = 0; i < numberOfMints; i++) {
+            _safeMint(msg.sender, _totalSupply);
+        }
+    }
+
     function claimRewards() external {
 
         uint pending = pendingRewards();
@@ -789,21 +832,6 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
         }
     }
 
-    function pendingRewards() public view returns (uint256) {
-
-        uint bal = MDBInContract();
-        uint expectedBalance = ( IERC20(MDB).totalSupply() * maxSupplyPercentage ) / 10000;
-
-        if (bal < expectedBalance) {
-            return 0;
-        }
-
-        return bal - expectedBalance;
-    }
-
-    function MDBInContract() public view returns (uint256) {
-        return IERC20(MDB).balanceOf(address(this));
-    }
 
     /**
      * @dev See {IERC721-approve}.
@@ -821,26 +849,10 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
     }
 
     /**
-     * @dev See {IERC721-getApproved}.
-     */
-    function getApproved(uint256 tokenId) public view override returns (address) {
-        require(_exists(tokenId), "ERC721: approved query for nonexistent token");
-
-        return _tokenApprovals[tokenId];
-    }
-
-    /**
      * @dev See {IERC721-setApprovalForAll}.
      */
     function setApprovalForAll(address operator, bool approved) public override {
         _setApprovalForAll(_msgSender(), operator, approved);
-    }
-
-    /**
-     * @dev See {IERC721-isApprovedForAll}.
-     */
-    function isApprovedForAll(address wpowner, address operator) public view override returns (bool) {
-        return _operatorApprovals[wpowner][operator];
     }
 
     /**
@@ -879,6 +891,74 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
         _safeTransfer(from, to, tokenId, _data);
     }
 
+    receive() external payable{}
+    
+
+    ////////////////////////////////////////////////
+    ///////////      READ FUNCTIONS      ///////////
+    ////////////////////////////////////////////////
+
+    function pendingRewards() public view returns (uint256) {
+
+        uint bal = MDBInContract();
+        uint expectedBalance = ( IERC20(MDB).totalSupply() * maxSupplyPercentage ) / 100000;
+
+        if (bal < expectedBalance) {
+            return 0;
+        }
+
+        return bal - expectedBalance;
+    }
+
+    function MDBInContract() public view returns (uint256) {
+        return IERC20(MDB).balanceOf(address(this));
+    }
+
+
+    /**
+     * @dev See {IERC721-getApproved}.
+     */
+    function getApproved(uint256 tokenId) public view override returns (address) {
+        require(_exists(tokenId), "ERC721: approved query for nonexistent token");
+
+        return _tokenApprovals[tokenId];
+    }
+
+    /**
+     * @dev See {IERC721-isApprovedForAll}.
+     */
+    function isApprovedForAll(address wpowner, address operator) public view override returns (bool) {
+        return _operatorApprovals[wpowner][operator];
+    }
+
+    /**
+     * @dev Returns whether `tokenId` exists.
+     *
+     * Tokens can be managed by their owner or approved accounts via {approve} or {setApprovalForAll}.
+     *
+     * Tokens start existing when they are minted (`_mint`),
+     */
+    function _exists(uint256 tokenId) internal view returns (bool) {
+        return _owners[tokenId] != address(0);
+    }
+
+    /**
+     * @dev Returns whether `spender` is allowed to manage `tokenId`.
+     *
+     * Requirements:
+     *
+     * - `tokenId` must exist.
+     */
+    function _isApprovedOrOwner(address spender, uint256 tokenId) internal view returns (bool) {
+        require(_exists(tokenId), "ERC721: operator query for nonexistent token");
+        address wpowner = ownerOf(tokenId);
+        return (spender == wpowner || getApproved(tokenId) == spender || isApprovedForAll(wpowner, spender));
+    }
+
+    ////////////////////////////////////////////////
+    ///////////    INTERNAL FUNCTIONS    ///////////
+    ////////////////////////////////////////////////
+    
     /**
      * @dev Safely transfers `tokenId` token from `from` to `to`, checking first that contract recipients
      * are aware of the ERC721 protocol to prevent tokens from being forever locked.
@@ -907,51 +987,6 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
         require(_checkOnERC721Received(from, to, tokenId, _data), "ERC721: transfer to non ERC721Receiver implementer");
     }
 
-    /**
-     * @dev Returns whether `tokenId` exists.
-     *
-     * Tokens can be managed by their owner or approved accounts via {approve} or {setApprovalForAll}.
-     *
-     * Tokens start existing when they are minted (`_mint`),
-     */
-    function _exists(uint256 tokenId) internal view returns (bool) {
-        return _owners[tokenId] != address(0);
-    }
-
-    /**
-     * @dev Returns whether `spender` is allowed to manage `tokenId`.
-     *
-     * Requirements:
-     *
-     * - `tokenId` must exist.
-     */
-    function _isApprovedOrOwner(address spender, uint256 tokenId) internal view returns (bool) {
-        require(_exists(tokenId), "ERC721: operator query for nonexistent token");
-        address wpowner = ownerOf(tokenId);
-        return (spender == wpowner || getApproved(tokenId) == spender || isApprovedForAll(wpowner, spender));
-    }
-
-    /** 
-     * Mints New NFT To Caller If Minting Has Not Been Disabled
-     */
-    function mint(uint256 numberOfMints) external payable {
-        require(
-            tradingEnabled,
-            'Trading Not Enabled'
-        );
-        if (whitelistEnabled) {
-            require(
-                isWhitelisted[msg.sender],
-                'Caller not on white list'
-            );
-        }
-        require(numberOfMints > 0, 'Invalid Input');
-        require(price * numberOfMints <= msg.value, 'Incorrect Price Sent');
-
-        for (uint i = 0; i < numberOfMints; i++) {
-            _safeMint(msg.sender, _totalSupply);
-        }
-    }
 
     /**
      * @dev Same as {xref-ERC721-_safeMint-address-uint256-}[`_safeMint`], with an additional `data` parameter which is
@@ -1109,9 +1144,6 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
         }
     }
 
-    receive() external payable{}
-
-
     function fetchAllOwners() external view returns (address[] memory) {
         return allOwners;
     }
@@ -1144,6 +1176,13 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
     }
 
     /**
+        Returns Total Number Of NFTs Minted
+     */
+    function totalSupply() external view returns (uint256) {
+        return _totalSupply;
+    }
+
+    /**
      * @dev See {IERC721Metadata-name}.
      */
     function name() public pure override returns (string memory) {
@@ -1163,10 +1202,7 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         require(_exists(tokenId), "nonexistent token");
 
-        string memory baseURI = "https://gateway.pinata.cloud/ipfs/QmQQSVjB5rvrKFRrZuJVXs1D3QAasz7bPQjst4mRcBzrJB/FS-";
-        string memory ending = ".png";
-        string memory middle = uint2str(tokenId+1);
-        string memory fHalf = string.concat(baseURI, middle);
+        string memory fHalf = string.concat(baseURI, uint2str(tokenId));
         return string.concat(fHalf, ending);
     }
 
