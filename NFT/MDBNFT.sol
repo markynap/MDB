@@ -977,6 +977,26 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
         return IERC20(MDB).balanceOf(address(this));
     }
 
+    function currentBounty() external view returns (uint256) {
+        return ( pendingRewards() * bountyPercent ) / BOUNTY_DENOMINATOR;
+    }
+
+    function fetchTokenIDsForUser(address user) external view returns (uint256[] memory) {
+        uint balance = _balances[user];
+        uint256[] memory arr = new uint256[](balance);
+        if (balance <= 0) {
+            return arr;
+        }
+        uint count = 0;
+        for (uint i = 0; i < _totalSupply;) {
+            if (_owners[i] == user) {
+                arr[count] = i;
+                count++;
+            }
+            unchecked { ++i; }
+        }
+        return arr;
+    }
 
     /**
      * @dev See {IERC721-getApproved}.
