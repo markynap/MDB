@@ -7,14 +7,6 @@ import "./SafeMath.sol";
 import "./IUniswapV2Router02.sol";
 import "./ReentrantGuard.sol";
 
-interface IXUSD {
-    function xSwapRouter() external view returns (address);
-}
-
-interface StableSwapRouter {
-    function exchange(address source, address tokenIn, address tokenOut, uint256 amountTokenIn, address destination) external;
-}
-
 interface XUSDRoyalty {
     function getFee() external view returns (uint256);
     function getFeeRecipient() external view returns (address);
@@ -50,17 +42,16 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
     mapping ( address => bool ) public isTransferFeeExempt;
 
     // Token Activation
-    mapping ( address => bool ) public canTransactPreLaunch;
     bool public tokenActivated;
 
     // Dead Wallet
     address private constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
+    // MDB Plus
+    address public constant MDBPlus = 0x9f8BB16f49393eeA4331A39B69071759e54e16ea;
+
     // PCS Router
     IUniswapV2Router02 private router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
-
-    // XUSD Token
-    address public constant XUSD = 0x324E8E649A6A3dF817F97CdDBED2b746b62553dD;
 
     // Royalty Data Fetcher
     XUSDRoyalty private immutable royaltyTracker;
@@ -69,15 +60,15 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
     address[] path;
 
     // Fees
-    uint256 public mintFee        = 99250;            // 0.75% mint fee
-    uint256 public sellFee        = 99750;            // 0.25% redeem fee 
-    uint256 public transferFee    = 99750;            // 0.25% transfer fee
-    uint256 public stableSwapFee  = 99950;            // 0.05% stable swap fee
+    uint256 public mintFee        = 98000;   // 2% mint fee
+    uint256 public sellFee        = 98000;   // 2% redeem fee 
+    uint256 public transferFee    = 98000;   // 2% transfer fee
+    uint256 public cashedOutFee   = 97000;   // 3% cashed out fee       
     uint256 private constant feeDenominator = 10**5;
 
     // Maximum Holdings
-    uint256 public max_holdings = 50_000 * 10**18;
-    uint256 public constant min_max_holdings = 20_000 * 10**18;
+    uint256 public cashOutMinimum = 1_000 * 10**18;
+    uint256 public constant min_cash_out_minimum = 100 * 10**18;
     
     // Underlying Asset Is BUSD
     IERC20 public constant underlying = IERC20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
@@ -95,9 +86,6 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
         // Fee Exempt PCS Router And Creator For Initial Distribution
         isTransferFeeExempt[address(router)] = true;
         isTransferFeeExempt[msg.sender]      = true;
-
-        // Allows Mint Access Pre Activation
-        canTransactPreLaunch[msg.sender] = true;
 
         // Swap Path For BNB -> BUSD
         path = new address[](2);
@@ -149,7 +137,7 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
     /** Transfer Function */
     function transfer(address recipient, uint256 amount) external override nonReentrant returns (bool) {
         if (recipient == msg.sender) {
-            _sell(msg.sender, amount, msg.sender);
+            _sell(msg.sender, amount, msg.sender, sellFee);
             return true;
         } else {
             return _transferFrom(msg.sender, recipient, amount);
@@ -231,7 +219,7 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
         @param tokenAmount Number of MDB+ Tokens To Redeem, Must be greater than 0
     */
     function sell(uint256 tokenAmount) external nonReentrant returns (uint256) {
-        return _sell(msg.sender, tokenAmount, msg.sender);
+        return _sell(msg.sender, tokenAmount, msg.sender, sellFee);
     }
     
     /** 
@@ -240,45 +228,7 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
         @param recipient Recipient Of BUSD transfer, Must not be address(0)
     */
     function sell(uint256 tokenAmount, address recipient) external nonReentrant returns (uint256) {
-        return _sell(msg.sender, tokenAmount, recipient);
-    }
-
-    /**
-        Exchanges TokenIn For TokenOut 1:1 So Long As:
-            - TokenIn  is an approved XUSD stable and not address(0) or tokenOut
-            - TokenOut is an approved XUSD stable and not address(0) or tokenIn
-            - TokenIn and TokenOut have the same decimal count
-
-        @param tokenIn - Token To Give XUSD in exchange for TokenOut
-        @param tokenOut - Token To receive from swap
-        @param tokenInAmount - Amount of `tokenIn` to exchange for tokenOut
-        @param recipient - Recipient of `tokenOut` tokens
-     */
-    function exchange(address tokenIn, address tokenOut, uint256 tokenInAmount, address recipient) external nonReentrant {
-        require(
-            tokenIn != address(0) && 
-            tokenOut != address(0) && 
-            recipient != address(0) &&
-            tokenIn != tokenOut &&
-            tokenInAmount > 0,
-            'Invalid Params'
-        );
-        // log old price
-        uint oldPrice = _calculatePrice();
-        // instantiate xSwap Router
-        StableSwapRouter swapRouter = StableSwapRouter(IXUSD(XUSD).xSwapRouter());
-        require(
-            address(swapRouter) != address(0),
-            'Zero Address'
-        );
-        // transfer in tokenIn
-        uint received = _transferIn(tokenIn, tokenInAmount);
-        // take fee for contract
-        uint toSend = received.mul(stableSwapFee).div(feeDenominator);
-        // exchange tokenIn for tokenOut
-        swapRouter.exchange(XUSD, tokenIn, tokenOut, toSend, recipient);
-        // require price did not somehow fall
-        _requirePriceRises(oldPrice);
+        return _sell(msg.sender, tokenAmount, recipient, sellFee);
     }
     
     /** 
@@ -312,7 +262,7 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
         require(msg.value > 0, 'Zero Value');
         require(recipient != address(0), 'Zero Address');
         require(
-            tokenActivated || canTransactPreLaunch[msg.sender],
+            tokenActivated || msg.sender == this.getOwner(),
             'Token Not Activated'
         );
         
@@ -335,7 +285,7 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
     /** Stake Tokens and Deposits MDB+ in Sender's Address, Must Have Prior Approval For BUSD */
     function _mintWithBacking(uint256 numBUSD, address recipient) internal returns (uint256) {
         require(
-            tokenActivated || canTransactPreLaunch[msg.sender],
+            tokenActivated || msg.sender == this.getOwner(),
             'Token Not Activated'
         );
         // users token balance
@@ -360,7 +310,7 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
     }
     
     /** Burns MDB+ Tokens And Deposits BUSD Tokens into Recipients's Address */
-    function _sell(address seller, uint256 tokenAmount, address recipient) internal returns (uint256) {
+    function _sell(address seller, uint256 tokenAmount, address recipient, uint256 _sellFee) internal returns (uint256) {
         require(tokenAmount > 0 && _balances[seller] >= tokenAmount);
         require(seller != address(0) && recipient != address(0));
         
@@ -370,7 +320,7 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
         // tokens post fee to swap for underlying asset
         uint256 tokensToSwap = isTransferFeeExempt[seller] ? 
             tokenAmount.sub(10, 'Minimum Exemption') :
-            tokenAmount.mul(sellFee).div(feeDenominator);
+            tokenAmount.mul(_sellFee).div(feeDenominator);
 
         // value of taxed tokens
         uint256 amountUnderlyingAsset = amountOut(tokensToSwap);
@@ -422,11 +372,6 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
 
         // require price rises
         _requirePriceRises(oldPrice);
-        // require maximum holdings is not met
-        require(
-            getValueOfHoldings(recipient) <= max_holdings,
-            'Value Exceeds Maximum Holdings'
-        );
         // differentiate purchase
         emit Minted(recipient, tokensToMint);
         return tokensToMint;
@@ -554,19 +499,12 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
         tokenActivated = true;
         emit TokenActivated(block.number);
     }
-    
-    /** Registers List Of Addresses To Transact Before Token Goes Live */
-    function registerUserToBuyPreLaunch(address[] calldata users) external onlyOwner {
-        for (uint i = 0; i < users.length; i++) {
-            canTransactPreLaunch[users[i]] = true;
-        }
-    }
 
     /** Updates The Address Of The Flashloan Provider */
-    function setMaxHoldings(uint256 maxHoldings) external onlyOwner {
-        require(maxHoldings >= min_max_holdings, 'Minimum Reached');
-        max_holdings = maxHoldings;
-        emit SetMaxHoldings(maxHoldings);
+    function setCashOutMinimum(uint256 newCashOutMinimum) external onlyOwner {
+        require(newCashOutMinimum >= min_cash_out_minimum, 'Minimum Reached');
+        cashOutMinimum = newCashOutMinimum;
+        emit SetCashOutMinimum(newCashOutMinimum);
     }
 
     /** Updates The Address Of The Resource Collector */
@@ -587,22 +525,39 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
     /** 
         Sells Tokens On Behalf Of Other User
             Requirements:
-                User MUST have more than the max_holdings quantity in BUSD
+                User MUST have more than the cashOutMinimum quantity in BUSD
                 Can only redeem as much as they have excess in BUSD
      */
-    function sellDownAccountToMaximumHoldings(address account) external nonReentrant onlyOwner {
+    function sellDownAccountToCashOutMinimum(address account) external nonReentrant onlyOwner {
+        _sellDownAccountToCashOutMinimum(account);
+    }
+
+    /** 
+        Sells Tokens On Behalf Of List Of Users
+            Requirements:
+                User MUST have more than the cashOutMinimum quantity in BUSD
+                Can only redeem as much as they have excess in BUSD
+     */
+    function sellDownAccountsToCashOutMinimum(address[] calldata accounts) external nonReentrant onlyOwner {
+        uint len = accounts.length;
+        for (uint i = 0; i < len;) {
+            _sellDownAccountToCashOutMinimum(accounts[i]);
+            unchecked { ++i; }
+        }
+    }
+    
+    function _sellDownAccountToCashOutMinimum(address account) internal {
         require(account != address(0), 'Zero Address');
         require(_balances[account] > 0, 'Zero Amount');
 
         // value of accounts holdings
         uint valueOfHoldings = getValueOfHoldings(account);
-        require(
-            valueOfHoldings >= max_holdings,
-            'User Does Not Exceed Max Holdings'
-        );
+        if (valueOfHoldings < cashOutMinimum) {
+            return;
+        }
 
         // amount to sell to bring to max holdings
-        uint256 amtToSellBUSD = valueOfHoldings.sub(max_holdings);
+        uint256 amtToSellBUSD = valueOfHoldings.sub(cashOutMinimum);
 
         // convert to MDB+
         uint256 mdbPlusToSell = amtToSellBUSD.mul(precision).div(_calculatePrice());
@@ -612,7 +567,8 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
             _sell(
                 account,
                 mdbPlusToSell, 
-                account
+                account,
+                cashedOutFee
             );
         }
     }
@@ -621,17 +577,17 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
         Sets Mint, Transfer, Sell Fee
         Must Be Within Bounds ( Between 0% - 2% ) 
     */
-    function setFees(uint256 _mintFee, uint256 _transferFee, uint256 _sellFee, uint256 _stableSwapFee) external onlyOwner {
-        require(_mintFee >= 97000);       // capped at 3% fee
-        require(_transferFee >= 97000);   // capped at 3% fee
-        require(_sellFee >= 97000);       // capped at 3% fee
-        require(_stableSwapFee >= 99000); // capped at 1% fee
+    function setFees(uint256 _mintFee, uint256 _transferFee, uint256 _sellFee, uint256 _cashedOutFee) external onlyOwner {
+        require(_mintFee >= 96000);       // capped at 4% fee
+        require(_transferFee >= 96000);   // capped at 4% fee
+        require(_sellFee >= 96000);       // capped at 4% fee
+        require(_cashedOutFee >= 96000);  // capped at 4% fee
         
         mintFee = _mintFee;
         transferFee = _transferFee;
         sellFee = _sellFee;
-        stableSwapFee = _stableSwapFee;
-        emit SetFees(_mintFee, _transferFee, _sellFee, _stableSwapFee);
+        cashedOutFee = _cashedOutFee;
+        emit SetFees(_mintFee, _transferFee, _sellFee, _cashedOutFee);
     }
     
     /** Excludes Contract From Transfer Fees */
@@ -654,20 +610,20 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
     ///////////////////////////////////
     
     // Data Tracking
-    event PriceChange(uint256 previousPrice, uint256 currentPrice, uint256 totalSupply);
     event TokenActivated(uint blockNo);
+    event PriceChange(uint256 previousPrice, uint256 currentPrice, uint256 totalSupply);
 
     // Balance Tracking
-    event Burn(address from, uint256 amountTokensErased);
-    event GarbageCollected(uint256 amountTokensErased);
-    event Redeemed(address seller, uint256 amountMDB, uint256 amountBUSD);
     event Minted(address recipient, uint256 numTokens);
+    event GarbageCollected(uint256 amountTokensErased);
+    event Burn(address from, uint256 amountTokensErased);
+    event Redeemed(address seller, uint256 amountMDB, uint256 amountBUSD);
 
     // Upgradable Contract Tracking
-    event SetMaxHoldings(uint256 maxHoldings);
     event SetRouter(address newRouter);
+    event SetCashOutMinimum(uint256 cashOutMinimum);
 
     // Governance Tracking
     event SetPermissions(address Contract, bool feeExempt);
-    event SetFees(uint mintFee, uint transferFee, uint sellFee, uint stableSwapFee);
+    event SetFees(uint mintFee, uint transferFee, uint sellFee, uint256 cashedOutFee);
 }
