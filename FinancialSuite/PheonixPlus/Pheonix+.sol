@@ -29,8 +29,6 @@ interface XUSDRoyalty {
         Contract can sell down holders to a minimum value, almost gamified
             Is it individual holders that get booted, or is it everyone at once?
  */
-
-
 contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
     
     using SafeMath for uint256;
