@@ -683,6 +683,9 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
     // MDB Token
     address public constant MDB = 0x0557a288A93ed0DF218785F2787dac1cd077F8f3;
 
+    // MDB Plus Token
+    address public constant MDBPlus = 0x9f8BB16f49393eeA4331A39B69071759e54e16ea;
+
     // total number of NFTs Minted
     uint256 private _totalSupply;
 
@@ -691,6 +694,7 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
 
     // list of all unique nft owners
     address[] public allOwners;
+    mapping( address => uint256 ) public ownerIndex;
 
     // Mapping owner address to token count
     mapping(address => uint256) private _balances;
@@ -710,21 +714,25 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
 
     // maximum supply which can be minted
     uint256 public constant maxSupply = 500;
+    uint256 public constant halfwayMaxSupply = 250;
+    bool public halfwayCapped = true;
 
-    // price of each NFT
-    uint256 public constant price = 10**18;
+    // price of each NFT in MDBPlus
+    uint256 public price = 10**18;
 
     // bounty for claiming rewards
-    uint256 public bountyPercent = 1;
+    uint256 public bountyPercent = 25; // 0.25%
+    uint256 private constant BOUNTY_DENOMINATOR = 10_000;
 
     // max supply held within contract
     uint256 public maxSupplyPercentage = 5000;
 
     // URI Data
-    string private baseURI = "https://gateway.pinata.cloud/ipfs/QmQQSVjB5rvrKFRrZuJVXs1D3QAasz7bPQjst4mRcBzrJB/FS-";
+    string private baseURI = "temp";
     string private ending = ".json";
 
-
+    // Can claim rewards
+    bool canClaim = false;
 
 
     ////////////////////////////////////////////////
@@ -757,24 +765,27 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
     }
 
     function withdrawToken(address token) external onlyOwner {
-        require(token != MDB, 'Cannot withdraw MDB Tokens');
         IERC20(token).transfer(msg.sender, IERC20(token).balanceOf(address(this)));
     }
 
     function setMaxSupplyPercentage(uint newMaxSupply) external onlyOwner {
         require(
-            newMaxSupply <= 10,
-            'bounty too high'
+            newMaxSupply <= 50_000,
+            'supply percentage too high'
         );
         maxSupplyPercentage = newMaxSupply;
     }
 
     function setBountyPercent(uint newBounty) external onlyOwner {
         require(
-            newBounty <= 50,
+            newBounty <= 5000,
             'bounty too high'
         );
         bountyPercent = newBounty;
+    }
+
+    function setPrice(uint256 newPrice) external onlyOwner {
+        price = newPrice;
     }
 
     function setBaseURI(string calldata newURI) external onlyOwner {
@@ -785,6 +796,17 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
         ending = newExtention;
     }
 
+    function enableClaiming() external onlyOwner {
+        canClaim = true;
+    }
+
+    function disableClaiming() external onlyOwner {
+        canClaim = false;
+    }
+
+    function disableHalfwayCap() external onlyOwner {
+        halfwayCapped = false;
+    }
 
 
     ////////////////////////////////////////////////
@@ -794,7 +816,7 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
     /** 
      * Mints `numberOfMints` to caller
      */
-    function mint(uint256 numberOfMints) external payable {
+    function mint(uint256 numberOfMints) external {
         require(
             tradingEnabled,
             'Trading Not Enabled'
@@ -805,30 +827,67 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
                 'Caller not on white list'
             );
         }
-        require(numberOfMints > 0, 'Invalid Input');
-        require(price * numberOfMints <= msg.value, 'Incorrect Price Sent');
+        require(
+            numberOfMints > 0, 
+            'Invalid Input'
+        );
 
+        // number of MDB Plus To Transfer In
+        uint toTransferIn = price * numberOfMints;
+
+        // Transfer In Required Amounts
+        uint balBefore = IERC20(MDBPlus).balanceOf(address(this));
+        require(
+            IERC20(MDBPlus).transferFrom(
+                msg.sender,
+                address(this),
+                toTransferIn
+            ),
+            'Failure On TransferFrom'
+        );
+        uint balAfter = IERC20(MDBPlus).balanceOf(address(this));
+        require(
+            balAfter > balBefore,
+            'Nothing Sent In'
+        );
+
+        // Validate Correct Amount Was Received
+        uint received = balAfter - balBefore;
+        require(
+            received >= toTransferIn,
+            'Invalid Amount Sent In'
+        );
+
+        // Mint NFTs To Sender
         for (uint i = 0; i < numberOfMints; i++) {
             _safeMint(msg.sender, _totalSupply);
         }
     }
 
     function claimRewards() external {
+        require(
+            canClaim,
+            'Claiming Is Disabled'
+        );
 
         uint pending = pendingRewards();
         if (pending == 0) {
             return;
         }
 
-        uint bounty = ( pending * bountyPercent ) / 100;
+        uint bounty = ( pending * bountyPercent ) / BOUNTY_DENOMINATOR;
         if (bounty > 0) {
             IERC20(MDB).transfer(msg.sender, bounty);
             pending -= bounty;
         }
-        
-        for (uint i = 0; i < allOwners.length; i++) {
+
+        uint length = allOwners.length;
+        for (uint i = 0; i < length;) {
             uint amt = (( pending * balanceOf(allOwners[i]) ) / _totalSupply );
-            IERC20(MDB).transfer(allOwners[i], amt);
+            if (amt > 0) {
+                IERC20(MDB).transfer(allOwners[i], amt);
+            }
+            unchecked { ++i; }
         }
     }
 
@@ -901,13 +960,17 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
     function pendingRewards() public view returns (uint256) {
 
         uint bal = MDBInContract();
-        uint expectedBalance = ( IERC20(MDB).totalSupply() * maxSupplyPercentage ) / 100000;
+        uint expectedBalance = ( IERC20(MDB).totalSupply() * maxSupplyPercentage ) / 100_000;
 
         if (bal < expectedBalance) {
             return 0;
         }
 
         return bal - expectedBalance;
+    }
+
+    function pendingForUser(address user) external view returns (uint256) {
+        return ( pendingRewards() * _balances[user] ) / _totalSupply;
     }
 
     function MDBInContract() public view returns (uint256) {
@@ -1017,9 +1080,14 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
      */
     function _mint(address to, uint256 tokenId) internal {
         require(!_exists(tokenId), "ERC721: token already minted");
-        require(_totalSupply < maxSupply, 'All NFTs Have Been Minted');
+        if (halfwayCapped) {
+            require(_totalSupply < halfwayMaxSupply, 'Halfway Point Has Been Reached');
+        } else {
+            require(_totalSupply < maxSupply, 'All NFTs Have Been Minted');
+        }
 
         if (_balances[to] == 0) {
+            ownerIndex[to] = allOwners.length;
             allOwners.push(to);
         }
 
@@ -1054,6 +1122,7 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
         _approve(address(0), tokenId);
 
         if (_balances[to] == 0) {
+            ownerIndex[to] = allOwners.length;
             allOwners.push(to);
         }
 
@@ -1070,20 +1139,19 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
 
     function _removeOwner(address from) internal {
 
-        uint index = allOwners.length + 1;
-        for (uint i = 0; i < allOwners.length; i++) {
-            if (allOwners[i] == from) {
-                index = i;
-                break;
-            }
-        }
-        require(
-            index < allOwners.length,
-            'owner not found'
-        );
+        // set last element index to be removed index
+        ownerIndex[
+            allOwners[allOwners.length - 1]
+        ] = ownerIndex[from];
 
-        allOwners[index] = allOwners[allOwners.length - 1];
+        // set removed element to be last element
+        allOwners[
+            ownerIndex[from]
+        ] = allOwners[allOwners.length - 1];
+
+        // pop off last element
         allOwners.pop();
+        delete ownerIndex[from];
     }
 
     /**
