@@ -675,10 +675,10 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
     using SafeMath for uint256;
 
     // Token name
-    string private constant _name = 'MDB NFT';
+    string private constant _name = 'Phoenix Fire Club';
 
     // Token symbol
-    string private constant _symbol = 'MDBNFT';
+    string private constant _symbol = 'PFC';
 
     // MDB Token
     address public constant MDB = 0x0557a288A93ed0DF218785F2787dac1cd077F8f3;
