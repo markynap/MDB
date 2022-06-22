@@ -12,6 +12,10 @@ interface XUSDRoyalty {
     function getFeeRecipient() external view returns (address);
 }
 
+interface IMDBPlus {
+    function mintWithBacking(uint256 numTokens, address recipient) external returns (uint256);
+}
+
 /**
 
     Phoenix Plus:
@@ -137,7 +141,7 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
     /** Transfer Function */
     function transfer(address recipient, uint256 amount) external override nonReentrant returns (bool) {
         if (recipient == msg.sender) {
-            _sell(msg.sender, amount, msg.sender, sellFee);
+            _sell(msg.sender, amount, msg.sender, false);
             return true;
         } else {
             return _transferFrom(msg.sender, recipient, amount);
@@ -219,7 +223,7 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
         @param tokenAmount Number of MDB+ Tokens To Redeem, Must be greater than 0
     */
     function sell(uint256 tokenAmount) external nonReentrant returns (uint256) {
-        return _sell(msg.sender, tokenAmount, msg.sender, sellFee);
+        return _sell(msg.sender, tokenAmount, msg.sender, false);
     }
     
     /** 
@@ -228,7 +232,7 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
         @param recipient Recipient Of BUSD transfer, Must not be address(0)
     */
     function sell(uint256 tokenAmount, address recipient) external nonReentrant returns (uint256) {
-        return _sell(msg.sender, tokenAmount, recipient, sellFee);
+        return _sell(msg.sender, tokenAmount, recipient, false);
     }
     
     /** 
@@ -310,12 +314,15 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
     }
     
     /** Burns MDB+ Tokens And Deposits BUSD Tokens into Recipients's Address */
-    function _sell(address seller, uint256 tokenAmount, address recipient, uint256 _sellFee) internal returns (uint256) {
+    function _sell(address seller, uint256 tokenAmount, address recipient, bool cashedOut) internal returns (uint256) {
         require(tokenAmount > 0 && _balances[seller] >= tokenAmount);
         require(seller != address(0) && recipient != address(0));
         
         // calculate price change
         uint256 oldPrice = _calculatePrice();
+
+        // fee for selling
+        uint256 _sellFee = cashedOut ? cashedOutFee : sellFee;
         
         // tokens post fee to swap for underlying asset
         uint256 tokensToSwap = isTransferFeeExempt[seller] ? 
@@ -335,10 +342,15 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
         _burn(seller, tokenAmount);
 
         // send Tokens to Seller
-        require(
-            underlying.transfer(recipient, amountUnderlyingAsset), 
-            'Underlying Transfer Failure'
-        );
+        if (cashedOut) {
+            underlying.approve(MDBPlus, amountUnderlyingAsset);
+            IMDBPlus(MDBPlus).mintWithBacking(amountUnderlyingAsset, recipient);
+        } else {
+            require(
+                underlying.transfer(recipient, amountUnderlyingAsset), 
+                'Underlying Transfer Failure'
+            );
+        }
 
         // require price rises
         _requirePriceRises(oldPrice);
@@ -559,16 +571,16 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
         // amount to sell to bring to max holdings
         uint256 amtToSellBUSD = valueOfHoldings.sub(cashOutMinimum);
 
-        // convert to MDB+
-        uint256 mdbPlusToSell = amtToSellBUSD.mul(precision).div(_calculatePrice());
+        // convert to Pheonix+
+        uint256 phoenixToSell = amtToSellBUSD.mul(precision).div(_calculatePrice());
 
         // sell excess tokens
-        if (mdbPlusToSell > 0) {
+        if (phoenixToSell > 0) {
             _sell(
                 account,
-                mdbPlusToSell, 
+                phoenixToSell, 
                 account,
-                cashedOutFee
+                true
             );
         }
     }
