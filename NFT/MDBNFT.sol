@@ -714,8 +714,7 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
 
     // maximum supply which can be minted
     uint256 public constant maxSupply = 500;
-    uint256 public constant halfwayMaxSupply = 250;
-    bool public halfwayCapped = true;
+    bool public isPaused = false;
 
     // price of each NFT in MDBPlus
     uint256 public price = 10**18;
@@ -804,10 +803,13 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
         canClaim = false;
     }
 
-    function disableHalfwayCap() external onlyOwner {
-        halfwayCapped = false;
+    function pause() external onlyOwner {
+        isPaused = true;
     }
 
+    function unpause() external onlyOwner {
+        isPaused = false;
+    }
 
     ////////////////////////////////////////////////
     ///////////     PUBLIC FUNCTIONS     ///////////
@@ -827,6 +829,10 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
                 'Caller not on white list'
             );
         }
+        require(
+            !isPaused,
+            'Minting Is Paused'
+        );
         require(
             numberOfMints > 0, 
             'Invalid Input'
@@ -1100,12 +1106,8 @@ contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
      */
     function _mint(address to, uint256 tokenId) internal {
         require(!_exists(tokenId), "ERC721: token already minted");
-        if (halfwayCapped) {
-            require(_totalSupply < halfwayMaxSupply, 'Halfway Point Has Been Reached');
-        } else {
-            require(_totalSupply < maxSupply, 'All NFTs Have Been Minted');
-        }
-
+        require(_totalSupply < maxSupply, 'All NFTs Have Been Minted');
+        
         if (_balances[to] == 0) {
             ownerIndex[to] = allOwners.length;
             allOwners.push(to);
