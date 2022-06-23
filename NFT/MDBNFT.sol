@@ -669,7 +669,7 @@ interface IERC20 {
     event Approval(address indexed owner, address indexed spender, uint256 value);
 }
 
-contract MDBNFT is Context, ERC165, IERC721, IERC721Metadata, Ownable {
+contract PhoenixFireClub is Context, ERC165, IERC721, IERC721Metadata, Ownable {
     
     using Address for address;
     using SafeMath for uint256;
