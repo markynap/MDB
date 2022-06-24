@@ -30,9 +30,9 @@ contract Infinity is IERC20, Ownable {
     mapping (address => mapping (address => uint256)) private _allowances;
 
     // Taxation on transfers
-    uint256 public buyFee             = 1000;
-    uint256 public sellFee            = 1500;
-    uint256 public transferFee        = 0;
+    uint256 public buyFee             = 500;
+    uint256 public sellFee            = 500;
+    uint256 public transferFee        = 500;
     uint256 public constant TAX_DENOM = 10000;
 
     // Max Transaction Limit

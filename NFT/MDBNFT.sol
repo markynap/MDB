@@ -733,6 +733,13 @@ contract PhoenixFireClub is Context, ERC165, IERC721, IERC721Metadata, Ownable {
     // Can claim rewards
     bool canClaim = false;
 
+    // monthly time limit for claiming
+    uint256 public lastClaim;
+    uint256 public constant claimWaitTime = 28800 * 30;
+
+    constructor(){
+        lastClaim = block.number;
+    }
 
     ////////////////////////////////////////////////
     ///////////   RESTRICTED FUNCTIONS   ///////////
@@ -811,6 +818,11 @@ contract PhoenixFireClub is Context, ERC165, IERC721, IERC721Metadata, Ownable {
         isPaused = false;
     }
 
+    function timeUntilNextClaim() public view returns (uint256) {
+        uint diff = block.number - lastClaim;
+        return diff >= claimWaitTime ? 0 : claimWaitTime - diff;
+    }
+
     ////////////////////////////////////////////////
     ///////////     PUBLIC FUNCTIONS     ///////////
     ////////////////////////////////////////////////
@@ -874,6 +886,10 @@ contract PhoenixFireClub is Context, ERC165, IERC721, IERC721Metadata, Ownable {
         require(
             canClaim,
             'Claiming Is Disabled'
+        );
+        require(
+            timeUntilNextClaim() == 0,
+            'Not Time To Claim'
         );
 
         uint pending = pendingRewards();

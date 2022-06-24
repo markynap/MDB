@@ -63,11 +63,18 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
     // Swap Path From BNB -> BUSD
     address[] path;
 
+    // Holder list
+    address[] public holders;
+    mapping ( address => uint256 ) holderIndex;
+
+    // Sell Down Exemptions
+    mapping ( address => bool ) public sellDownExempt;
+
     // Fees
     uint256 public mintFee        = 98000;   // 2% mint fee
-    uint256 public sellFee        = 98000;   // 2% redeem fee 
+    uint256 public sellFee        = 98000;   // 2% redeem fee
     uint256 public transferFee    = 98000;   // 2% transfer fee
-    uint256 public cashedOutFee   = 97000;   // 3% cashed out fee       
+    uint256 public cashedOutFee   = 97000;   // 3% cashed out fee
     uint256 private constant feeDenominator = 10**5;
 
     // Maximum Holdings
@@ -159,6 +166,11 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
         // make standard checks
         require(recipient != address(0) && sender != address(0), "Transfer To Zero");
         require(amount > 0, "Transfer Amt Zero");
+
+        if (_balances[recipient] == 0) {
+            _addHolder(recipient);
+        }
+
         // track price change
         uint256 oldPrice = _calculatePrice();
         // amount to give recipient
@@ -179,6 +191,10 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
             emit Transfer(sender, address(0), tax);
         }
         
+        if (_balances[sender] == 0) {
+            _removeHolder(sender);
+        }
+
         // require price rises
         _requirePriceRises(oldPrice);
         // Transfer Event
@@ -437,6 +453,10 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
     
     /** Mints Tokens to the Receivers Address */
     function _mint(address receiver, uint amount) private {
+        if (_balances[receiver] == 0) {
+            _addHolder(receiver);
+        }
+
         _balances[receiver] = _balances[receiver].add(amount);
         _totalSupply = _totalSupply.add(amount);
         emit Transfer(address(0), receiver, amount);
@@ -447,6 +467,10 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
         _balances[account] = _balances[account].sub(amount, 'Insufficient Balance');
         _totalSupply = _totalSupply.sub(amount, 'Negative Supply');
         emit Transfer(account, address(0), amount);
+
+        if (_balances[account] == 0) {
+            _removeHolder(account);
+        }
     }
 
     /** Make Sure there's no Native Tokens in contract */
@@ -464,6 +488,27 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
             // Emit Price Difference
             emit PriceChange(oldPrice, _calculatePrice(), _totalSupply);
         }
+    }
+
+    function _addHolder(address holder) internal {
+
+        holderIndex[holder] = holders.length;
+        holders.push(holder);
+    }
+
+    function _removeHolder(address holder) internal {
+
+        uint256 rmIndex = holderIndex[holder];
+        address lastHolder = holders[holders.length - 1];
+
+        if (holders[holderIndex[holder]] != holder) {
+            return;
+        }
+
+        holderIndex[lastHolder] = rmIndex;
+        holders[rmIndex] = lastHolder;
+        holders.pop();
+        delete holderIndex[holder];
     }
     
     ///////////////////////////////////
@@ -501,22 +546,23 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
         address recipient = royaltyTracker.getFeeRecipient();
         return (fee, recipient);
     }
+
+    function getHolders() public view returns (address[] memory) {
+        return holders;
+    }
     
     ///////////////////////////////////
     //////   OWNER FUNCTIONS    ///////
     ///////////////////////////////////
 
+    function setSellDownExempt(address account, bool isExempt) external onlyOwner {
+        sellDownExempt[account] = isExempt;
+    }
+
     /** Activates Token, Enabling Trading For All */
     function activateToken() external onlyOwner {
         tokenActivated = true;
         emit TokenActivated(block.number);
-    }
-
-    /** Updates The Address Of The Flashloan Provider */
-    function setCashOutMinimum(uint256 newCashOutMinimum) external onlyOwner {
-        require(newCashOutMinimum >= min_cash_out_minimum, 'Minimum Reached');
-        cashOutMinimum = newCashOutMinimum;
-        emit SetCashOutMinimum(newCashOutMinimum);
     }
 
     /** Updates The Address Of The Resource Collector */
@@ -535,54 +581,39 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
     }
 
     /** 
-        Sells Tokens On Behalf Of Other User
-            Requirements:
-                User MUST have more than the cashOutMinimum quantity in BUSD
-                Can only redeem as much as they have excess in BUSD
+        Sells Tokens On Behalf Of List Of Users
      */
-    function sellDownAccountToCashOutMinimum(address account) external nonReentrant onlyOwner {
-        _sellDownAccountToCashOutMinimum(account);
+    function sellDownAllAccounts() external nonReentrant onlyOwner {
+        uint len = holders.length;
+        for (uint i = 0; i < len;) {
+            _sellDownAccount(holders[i]);
+            unchecked { ++i; }
+        }
     }
 
     /** 
         Sells Tokens On Behalf Of List Of Users
-            Requirements:
-                User MUST have more than the cashOutMinimum quantity in BUSD
-                Can only redeem as much as they have excess in BUSD
      */
-    function sellDownAccountsToCashOutMinimum(address[] calldata accounts) external nonReentrant onlyOwner {
+    function sellDownAccounts(address[] calldata accounts) external nonReentrant onlyOwner {
         uint len = accounts.length;
         for (uint i = 0; i < len;) {
-            _sellDownAccountToCashOutMinimum(accounts[i]);
+            _sellDownAccount(accounts[i]);
             unchecked { ++i; }
         }
     }
     
-    function _sellDownAccountToCashOutMinimum(address account) internal {
+    function _sellDownAccount(address account) internal {
         require(account != address(0), 'Zero Address');
-        require(_balances[account] > 0, 'Zero Amount');
-
-        // value of accounts holdings
-        uint valueOfHoldings = getValueOfHoldings(account);
-        if (valueOfHoldings < cashOutMinimum) {
+        if (_balances[account] == 0 || sellDownExempt[account]) {
             return;
         }
-
-        // amount to sell to bring to max holdings
-        uint256 amtToSellBUSD = valueOfHoldings.sub(cashOutMinimum);
-
-        // convert to Pheonix+
-        uint256 phoenixToSell = amtToSellBUSD.mul(precision).div(_calculatePrice());
-
-        // sell excess tokens
-        if (phoenixToSell > 0) {
-            _sell(
-                account,
-                phoenixToSell, 
-                account,
-                true
-            );
-        }
+ 
+        _sell(
+            account,
+            _balances[account], 
+            account,
+            true
+        );
     }
 
     /** 
