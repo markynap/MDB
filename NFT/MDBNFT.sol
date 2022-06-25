@@ -892,6 +892,8 @@ contract PhoenixFireClub is Context, ERC165, IERC721, IERC721Metadata, Ownable {
             'Not Time To Claim'
         );
 
+        lastClaim = block.number;
+
         uint pending = pendingRewards();
         if (pending == 0) {
             return;
