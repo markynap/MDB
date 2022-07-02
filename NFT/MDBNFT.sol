@@ -717,7 +717,7 @@ contract PhoenixFireClub is Context, ERC165, IERC721, IERC721Metadata, Ownable {
     bool public isPaused = false;
 
     // price of each NFT in MDBPlus
-    uint256 public price = 10**18;
+    uint256 public price = 660 * 10**18;
 
     // bounty for claiming rewards
     uint256 public bountyPercent = 25; // 0.25%
@@ -727,7 +727,7 @@ contract PhoenixFireClub is Context, ERC165, IERC721, IERC721Metadata, Ownable {
     uint256 public maxSupplyPercentage = 5000;
 
     // URI Data
-    string private baseURI = "temp";
+    string private baseURI = "https://opensea.mypinata.cloud/ipfs/QmSYpqg49BsaGDJk8jZ7bxzSZ9zX5ifKpdA78dEDAsnaib/";
     string private ending = ".json";
 
     // Can claim rewards
@@ -735,7 +735,13 @@ contract PhoenixFireClub is Context, ERC165, IERC721, IERC721Metadata, Ownable {
 
     // monthly time limit for claiming
     uint256 public lastClaim;
-    uint256 public constant claimWaitTime = 28800 * 30;
+    uint256 public claimWaitTime = 28800 * 30;
+
+    // Events
+    event Paused();
+    event UnPaused();
+    event TradingEnabled();
+    event WhitelistDisabled();
 
     constructor(){
         lastClaim = block.number;
@@ -744,6 +750,10 @@ contract PhoenixFireClub is Context, ERC165, IERC721, IERC721Metadata, Ownable {
     ////////////////////////////////////////////////
     ///////////   RESTRICTED FUNCTIONS   ///////////
     ////////////////////////////////////////////////
+
+    function setClaimWaitTime(uint256 claimWait) external onlyOwner {
+        claimWaitTime = claimWait;
+    }
 
     function whitelistUsers(address[] calldata users) external onlyOwner {
         for (uint i = 0; i < users.length; i++) {
@@ -759,10 +769,12 @@ contract PhoenixFireClub is Context, ERC165, IERC721, IERC721Metadata, Ownable {
 
     function disableWhitelist() external onlyOwner {
         whitelistEnabled = false;
+        emit WhitelistDisabled();
     }
 
     function enableTrading() external onlyOwner {
         tradingEnabled = true;
+        emit TradingEnabled();
     }
 
     function withdraw() external onlyOwner {
@@ -812,10 +824,12 @@ contract PhoenixFireClub is Context, ERC165, IERC721, IERC721Metadata, Ownable {
 
     function pause() external onlyOwner {
         isPaused = true;
+        emit Paused();
     }
 
     function unpause() external onlyOwner {
         isPaused = false;
+        emit UnPaused();
     }
 
     function timeUntilNextClaim() public view returns (uint256) {
