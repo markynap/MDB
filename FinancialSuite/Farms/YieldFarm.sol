@@ -319,6 +319,7 @@ contract YieldFarm is Ownable, IERC20 {
         address token_, 
         address feeRecipient_, 
         address reward_, 
+        address rewardSwapper,
         string memory name_, 
         string memory symbol_,
         uint256 leaveEarlyFee_,
@@ -333,11 +334,13 @@ contract YieldFarm is Ownable, IERC20 {
         token = token_;
         feeRecipient = feeRecipient_;
         reward = reward_;
+        rewardTokenSwapper = rewardSwapper;
         leaveEarlyFee = leaveEarlyFee_;
         lockTime = lockTime_;
         _name = name_;
         _symbol = symbol_;
         _decimals = IERC20(token_).decimals();
+        emit Transfer(address(0), msg.sender, 0);
     }
 
     /** Returns the total number of tokens in existence */

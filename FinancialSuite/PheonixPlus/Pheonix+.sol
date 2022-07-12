@@ -76,10 +76,6 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
     uint256 public transferFee    = 98000;   // 2% transfer fee
     uint256 public cashedOutFee   = 97000;   // 3% cashed out fee
     uint256 private constant feeDenominator = 10**5;
-
-    // Maximum Holdings
-    uint256 public cashOutMinimum = 1_000 * 10**18;
-    uint256 public constant min_cash_out_minimum = 100 * 10**18;
     
     // Underlying Asset Is BUSD
     IERC20 public constant underlying = IERC20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
@@ -664,7 +660,6 @@ contract PhoenixPlus is IERC20, Ownable, ReentrancyGuard {
 
     // Upgradable Contract Tracking
     event SetRouter(address newRouter);
-    event SetCashOutMinimum(uint256 cashOutMinimum);
 
     // Governance Tracking
     event SetPermissions(address Contract, bool feeExempt);

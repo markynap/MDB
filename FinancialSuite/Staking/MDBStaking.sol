@@ -551,7 +551,7 @@ contract MAXIStaking is Ownable, IERC20 {
 
     function _mintTo(address sender, uint256 received, uint256 previousBalance) internal {
         // Number Of Maxi Tokens To Mint
-        uint nToMint = (_totalSupply.mul(received).div(previousBalance)).sub(10);
+        uint nToMint = _totalSupply.mul(received).div(previousBalance);
         require(
             nToMint > 0,
             'Zero To Mint'

@@ -272,8 +272,11 @@ contract MDBBonds is Ownable {
     // PCS Router
     IUniswapV2Router02 public constant router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
 
+    // day
+    uint256 private constant day = 28800;
+
     // Lock Time In Blocks
-    uint256 public lockTime = 28800 * 60;
+    uint256 public lockTime = day * 60;
 
     // Minimum Value To Buy Bond
     uint256 public minimumValue = 10 * 10**18; // 10 BNB
@@ -299,6 +302,9 @@ contract MDBBonds is Ownable {
     // Swap Path
     address[] private path;
 
+    // Last Bond Purchase
+    uint256 public lastBondPurchased;
+
     // Events
     event BondCreated(address indexed user, uint amount, uint unlockBlock, uint bondID);
 
@@ -306,11 +312,12 @@ contract MDBBonds is Ownable {
         path = new address[](2);
         path[0] = router.WETH();
         path[1] = MDB;
+        lastBondPurchased = block.number;
     }
 
     function setLockTime(uint newLockTime) external onlyOwner {
         require(
-            newLockTime < 28800 * 366,
+            newLockTime < day * 366,
             'Lock Time Too Long'
         );
         
@@ -402,6 +409,13 @@ contract MDBBonds is Ownable {
             amount >= minimumValue,
             'Amount Less Than Minimum'
         );
+        require(
+            nextBondAvailable(),
+            'Bond Not Available'
+        );
+
+        // reset bond availability
+        lastBondPurchased = block.number;
 
         // buy MDB
         uint received = _buy(amount, minOut);
@@ -478,6 +492,17 @@ contract MDBBonds is Ownable {
 
         // remove bond data
         delete bonds[bondID];
+    }
+
+    function nextBondAvailable() public view returns (bool) {
+        return block.number - lastBondPurchased >= day;
+    }
+
+    function timeUntilNextBond() public view returns (uint256) {
+        if (nextBondAvailable()) {
+            return 0;
+        }
+        return day - ( block.number - lastBondPurchased);
     }
 
     function balanceOf() public view returns (uint256) {
