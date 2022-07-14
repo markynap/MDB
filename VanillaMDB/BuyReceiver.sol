@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: MIT
-pragma solidity 0.8.4;
+pragma solidity 0.8.14;
 
 import "./IERC20.sol";
 
@@ -7,14 +7,20 @@ interface IMDB {
     function getOwner() external view returns (address);
 }
 
+interface IYieldFarm {
+    function depositRewards(uint256 amount) external;
+}
+
 contract BuyReceiver {
 
     // MDB token
-    address public immutable token;
+    address public constant token = 0x0557a288A93ed0DF218785F2787dac1cd077F8f3;
 
     // Recipients Of Fees
-    address public trustFund;
-    address public marketing;
+    address public constant trustFund = 0x45F8F3a7A91e302935eB644f371bdE63D0b1bAc6;
+    address public constant marketing = 0x511DEaD182a47c60034FEdf36eA0714972625E85;
+    address public constant yieldFarm = 0x08254Df4F9461f8Fc15235be5092862BfF4824d4;
+    address public constant staking = 0xe8f699B68ddE8e59DBe8fdF20955931B25fe7dFa;
 
     /**
         Minimum Amount Of MDB In Contract To Trigger `trigger` Unless `approved`
@@ -30,7 +36,8 @@ contract BuyReceiver {
     event Approved(address caller, bool isApproved);
 
     // Trust Fund Allocation
-    uint256 public trustFundPercentage;
+    uint256 public marketingPercentage = 200;
+    uint256 public trustFundPercentage = 536;
 
     modifier onlyOwner(){
         require(
@@ -40,19 +47,7 @@ contract BuyReceiver {
         _;
     }
 
-    constructor(address token_, address trustFund_, address marketing_) {
-        require(
-            token_ != address(0) &&
-            trustFund_ != address(0) &&
-            marketing_ != address(0),
-            'Zero Address'
-        );
-
-        // Initialize Addresses
-        token = token_;
-        trustFund = trustFund_;
-        marketing = marketing_;
-
+    constructor() {
         // set initial approved
         approved[msg.sender] = true;
 
@@ -73,22 +68,23 @@ contract BuyReceiver {
         }
 
         // fraction out tokens
-        uint part1 = balance * trustFundPercentage / 100;
-        uint part2 = balance - part1;
+        uint part1 = balance * trustFundPercentage / 1000;
+        uint part2 = balance * marketingPercentage / 1000;
 
         // send to destinations
         _send(trustFund, part1);
-        _send(marketing, part2); 
-    }
+        _send(marketing, part2);
 
-    function setTrustFund(address tFund) external onlyOwner {
-        require(tFund != address(0));
-        trustFund = tFund;
-    }
-    
-    function setMarketing(address marketing_) external onlyOwner {
-        require(marketing_ != address(0));
-        marketing = marketing_;
+        uint remainder = IERC20(token).balanceOf(address(this));
+        uint forFarms = ( remainder * 2 ) / 3;
+        uint forStaking = remainder - forFarms;
+
+        // Send to farms
+        IERC20(token).approve(yieldFarm, 10**50);
+        IYieldFarm(yieldFarm).depositRewards(forFarms);
+
+        // Send to staking
+        _send(staking, forStaking);
     }
    
     function setApproved(address caller, bool isApproved) external onlyOwner {
@@ -102,6 +98,10 @@ contract BuyReceiver {
     
     function setTrustFundPercentage(uint256 newAllocatiton) external onlyOwner {
         trustFundPercentage = newAllocatiton;
+    }
+
+    function setMarketingPercentage(uint256 newAllocatiton) external onlyOwner {
+        marketingPercentage = newAllocatiton;
     }
     
     function withdraw() external onlyOwner {
